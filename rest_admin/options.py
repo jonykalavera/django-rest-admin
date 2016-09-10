@@ -5,6 +5,7 @@ from django.contrib.admin.options import (
     all_valid, helpers, _, messages, HttpResponseRedirect,
     SimpleTemplateResponse, quote
 )
+from restorm import fields
 from restorm.exceptions import RestException
 from rest_admin.forms import RestForm
 
@@ -19,7 +20,7 @@ class RestAdmin(ModelAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = RestForm
-        setattr(form, 'schema', self.opts.schema)
+        setattr(form, 'resource', self.model)
         return form
 
     def get_changelist(self, request, **kwargs):
@@ -33,11 +34,9 @@ class RestAdmin(ModelAdmin):
         """
         Hook for specifying fields.
         """
-        # assert False, self.opts.schema.keys()
         return [
-            k for k, v in self.opts.schema.items()
-            if v.get('editable', True)
-            and v.get('type', 'char') != 'list']
+            k for k, v in self.opts._fields.items()
+            if v.editable and not isinstance(v, fields.RelatedResource)]
 
     @csrf_protect_m
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):

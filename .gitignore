@@ -2,3 +2,4 @@
 .project
 *.egg-info
 .tox*
+*.sqlite*

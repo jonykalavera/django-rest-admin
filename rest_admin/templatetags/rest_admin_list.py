@@ -14,10 +14,11 @@ register = Library()
 
 def result_headers(change_list):
     headers = [{
-        u'text': v.get('verbose_name', k),
+        u'text': v.verbose_name or k,
         u'sortable': False,
         u'class_attrib': u' class="column-{}"'.format(k)
-    } for k, v in change_list.opts.schema.items() if k in change_list.list_display]
+    } for k, v in change_list.opts._fields.items()
+        if k in change_list.list_display]
     # headers.insert(0, )
     return headers
 

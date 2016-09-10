@@ -1,4 +1,5 @@
 from django import forms
+from restorm import fields
 
 
 class RestForm(forms.Form):
@@ -11,41 +12,38 @@ class RestForm(forms.Form):
             kwargs['initial'] = self.initial
         kwargs.pop('instance', None)
         super(RestForm, self).__init__(*args, **kwargs)
-        for key, value in self.schema.items():
-            field_type = value.get('type', 'str')
-            editable = value.get('editable', True)
-            if not editable:
+        for name, field in self.resource._meta._fields.items():
+            if not field.editable:
                 continue
-            if field_type == 'int':
+            label = field.verbose_name or name
+            if isinstance(field, fields.IntegerField):
                 self.fields.update({
-                    key: forms.IntegerField(
-                        label=value.get('verbose_name', key),
-                        required=value.get('required', False)),
+                    name: forms.IntegerField(
+                        label=label, required=field.required),
                 })
-            elif field_type == 'email':
-                self.fields.update({
-                    key: forms.EmailField(
-                        label=value.get('verbose_name', key),
-                        required=value.get('required', False)),
-                })
-            elif field_type == 'str':
-                required = value.get('required', False)
-                choices = value.get('choices', None)
-                if choices:
-                    if not required:
+            # elif field_type == 'email':
+            #     self.fields.update({
+            #         key: forms.EmailField(
+            #             label=value.get('verbose_name', key),
+            #             required=value.get('required', False)),
+            #     })
+            elif isinstance(field, fields.CharField):
+                if field.choices:
+                    choices = field.choices
+                    if not field.required:
                         choices = (('', '<Choose>'),) + choices
                     self.fields.update({
-                        key: forms.ChoiceField(
-                            label=value.get('verbose_name', key),
-                            required=required,
+                        name: forms.ChoiceField(
+                            label=label,
+                            required=field.required,
                             choices=choices),
                     })
                 else:
                     self.fields.update({
-                        key: forms.CharField(
-                            label=value.get('verbose_name', key),
-                            required=value.get('required', False),
-                            max_length=512),
+                        name: forms.CharField(
+                            label=label,
+                            required=field.required,
+                            max_length=field.max_length or 255),
                     })
 
     def save(self, commit=False):
