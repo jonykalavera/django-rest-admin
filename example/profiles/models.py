@@ -3,6 +3,12 @@ from restorm import fields
 from .client import profiles_client
 
 
+def get_subs_params(data, resource):
+    value = data
+    return {
+        resource._meta.pk.attname: value
+    }
+
 class Profile(Resource):
     LANGUAGE_CHOICES = (
         ('en', 'English'),
@@ -19,6 +25,10 @@ class Profile(Resource):
     modified_by = fields.CharField(editable=False)
     modified_at = fields.CharField(editable=False)
 
+    subscriptions = fields.ToManyField(
+        'subscriptions', 'profiles.models.Subscription',
+        get_itm_params=get_subs_params)
+
     class Meta:
         resource_name = 'profile'
         list = r'^profiles/$'
@@ -31,7 +41,7 @@ class Subscription(Resource):
         ('smartfocus', 'Smart Focus'),
     )
     id = fields.IntegerField(primary=True, editable=False)
-    profile = fields.RelatedResource('profile', Profile)
+    profile = fields.ToOneField('profile', Profile)
     vendor_slug = fields.CharField(required=True, choices=VENDOR_CHOICES)
     vendor_name = fields.CharField(editable=False)
     enabled = fields.BooleanField(default=True)

@@ -3,7 +3,7 @@ from django.contrib.admin.options import (
     TemplateResponse, csrf_protect_m, DisallowedModelAdminToField,
     PermissionDenied, unquote, Http404, force_text, reverse, escape, escapejs,
     all_valid, helpers, _, messages, HttpResponseRedirect,
-    SimpleTemplateResponse, quote
+    SimpleTemplateResponse, quote, InlineModelAdmin
 )
 from restorm import fields
 from restorm.exceptions import RestException
@@ -363,3 +363,17 @@ class RestAdmin(ModelAdmin):
         context.update(extra_context or {})
 
         return self.render_delete_form(request, context)
+
+
+class InlineRestAdmin(InlineModelAdmin):
+    def get_formset(self, request, obj=None, **kwargs):
+        assert False, obj
+        super(InlineRestAdmin, self).get_formset(request, obj, **kwargs)
+
+
+class StackedRestInline(InlineRestAdmin):
+    template = 'admin/edit_inline/stacked.html'
+
+
+class TabularRestInline(InlineRestAdmin):
+    template = 'admin/edit_inline/tabular.html'
