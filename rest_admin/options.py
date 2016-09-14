@@ -5,7 +5,7 @@ from django.contrib.admin.options import (
     all_valid, helpers, _, messages, HttpResponseRedirect,
     SimpleTemplateResponse, quote, InlineModelAdmin
 )
-from restorm import fields
+from restorm.fields.related import RelatedResource
 from restorm.exceptions import RestException
 from rest_admin.forms import RestForm
 
@@ -36,7 +36,7 @@ class RestAdmin(ModelAdmin):
         """
         return [
             k for k, v in self.opts._fields.items()
-            if v.editable and not isinstance(v, fields.RelatedResource)]
+            if v.editable and not isinstance(v, RelatedResource)]
 
     @csrf_protect_m
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
@@ -171,7 +171,7 @@ class RestAdmin(ModelAdmin):
         if change:
             obj.save()
         else:
-            self.model.objects.create(data=obj)
+            self.model.objects.create(**obj)
 
     def log_addition(self, *args, **kwargs):
         pass

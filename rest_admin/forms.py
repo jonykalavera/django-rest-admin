@@ -21,6 +21,13 @@ class RestForm(forms.Form):
                     name: forms.IntegerField(
                         label=label, required=field.required),
                 })
+            if isinstance(field, fields.URLField):
+                self.fields.update({
+                    name: forms.URLField(
+                        label=label,
+                        required=field.required,
+                        max_length=field.max_length or 255),
+                })
             # elif field_type == 'email':
             #     self.fields.update({
             #         key: forms.EmailField(
