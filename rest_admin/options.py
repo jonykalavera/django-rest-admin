@@ -5,15 +5,14 @@ from django.contrib.admin.options import (
     all_valid, helpers, _, messages, HttpResponseRedirect,
     SimpleTemplateResponse, quote, InlineModelAdmin
 )
-from restorm.fields.related import RelatedResource
+from restorm.fields.related import ToManyField
 from restorm.exceptions import RestException
 from rest_admin.forms import RestForm
 
 
-
 class RestAdmin(ModelAdmin):
-    change_list_template = 'rest_admin/change_list.html'
-    change_form_template = 'rest_admin/change_form.html'
+    # change_list_template = 'rest_admin/change_list.html'
+    # change_form_template = 'rest_admin/change_form.html'
 
     def get_actions(self, request):
         return None
@@ -36,7 +35,7 @@ class RestAdmin(ModelAdmin):
         """
         return [
             k for k, v in self.opts._fields.items()
-            if v.editable and not isinstance(v, RelatedResource)]
+            if v.editable and not isinstance(v, ToManyField)]
 
     @csrf_protect_m
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):

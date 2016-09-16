@@ -15,25 +15,25 @@ class RestForm(forms.Form):
         for name, field in self.resource._meta._fields.items():
             if not field.editable:
                 continue
-            label = field.verbose_name or name
+            label = field.verbose_name.capitalize()
             if isinstance(field, fields.IntegerField):
                 self.fields.update({
                     name: forms.IntegerField(
                         label=label, required=field.required),
                 })
-            if isinstance(field, fields.URLField):
+            elif isinstance(field, fields.URLField):
                 self.fields.update({
                     name: forms.URLField(
                         label=label,
                         required=field.required,
                         max_length=field.max_length or 255),
                 })
-            # elif field_type == 'email':
-            #     self.fields.update({
-            #         key: forms.EmailField(
-            #             label=value.get('verbose_name', key),
-            #             required=value.get('required', False)),
-            #     })
+            elif isinstance(field, fields.BooleanField):
+                self.fields.update({
+                    name: forms.BooleanField(
+                        label=label,
+                        required=field.required),
+                })
             elif isinstance(field, fields.CharField):
                 if field.choices:
                     choices = field.choices
@@ -52,6 +52,18 @@ class RestForm(forms.Form):
                             required=field.required,
                             max_length=field.max_length or 255),
                     })
+            elif isinstance(field, fields.ToOneField):
+                choices = [
+                    (o.id, o.__unicode__())
+                    for o in field._resource.objects.all()]
+                if not field.required:
+                    choices = (('', '<Choose>'),) + choices
+                self.fields.update({
+                    name: forms.ChoiceField(
+                        label=label,
+                        required=field.required,
+                        choices=choices),
+                })
 
     def save(self, commit=False):
         if self.instance:
