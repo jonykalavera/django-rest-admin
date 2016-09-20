@@ -1,6 +1,8 @@
 from django import forms
 from restorm import fields
 
+from .widgets import ToManyFieldRawIdWidget
+
 
 class RestForm(forms.Form):
     def __init__(self, *args, **kwargs):
@@ -53,17 +55,22 @@ class RestForm(forms.Form):
                             max_length=field.max_length or 255),
                     })
             elif isinstance(field, fields.ToOneField):
-                choices = [
-                    (o.id, o.__unicode__())
-                    for o in field._resource.objects.all()]
-                if not field.required:
-                    choices = (('', '<Choose>'),) + choices
-                self.fields.update({
-                    name: forms.ChoiceField(
-                        label=label,
-                        required=field.required,
-                        choices=choices),
-                })
+                if not name in self.admin.raw_id_fields:
+                    choices = [
+                        (o.id, o.__unicode__())
+                        for o in field._resource.objects.all()]
+                    if not field.required:
+                        choices = (('', '<Choose>'),) + choices
+                    self.fields.update({
+                        name: forms.ChoiceField(
+                            label=label,
+                            required=field.required,
+                            choices=choices),
+                    })
+                else:
+                    self.fields.update({
+                        name: ToManyFieldRawIdWidget(field, self.admin),
+                    })
 
     def save(self, commit=False):
         if self.instance:

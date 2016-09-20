@@ -20,6 +20,7 @@ class RestAdmin(ModelAdmin):
     def get_form(self, request, obj=None, **kwargs):
         form = RestForm
         setattr(form, 'resource', self.model)
+        setattr(form, 'admin', self)
         return form
 
     def get_changelist(self, request, **kwargs):
@@ -34,8 +35,7 @@ class RestAdmin(ModelAdmin):
         Hook for specifying fields.
         """
         return [
-            k for k, v in self.opts._fields.items()
-            if v.editable and not isinstance(v, ToManyField)]
+            k for k, v in self.opts._fields.items() if v.editable]
 
     @csrf_protect_m
     def changeform_view(self, request, object_id=None, form_url='', extra_context=None):
