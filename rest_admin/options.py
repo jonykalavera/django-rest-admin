@@ -1,16 +1,40 @@
+import copy
 from django.contrib.admin.options import (
     ModelAdmin, add_preserved_filters, TO_FIELD_VAR, IS_POPUP_VAR,
     TemplateResponse, csrf_protect_m, DisallowedModelAdminToField,
     PermissionDenied, unquote, Http404, force_text, reverse, escape, escapejs,
     all_valid, helpers, _, messages, HttpResponseRedirect,
     SimpleTemplateResponse, quote, InlineModelAdmin, widgets, get_ul_class,
-    flatten_fieldsets, partial, modelform_defines_fields, FieldError
+    flatten_fieldsets, partial, modelform_defines_fields, FieldError,
+    FORMFIELD_FOR_DBFIELD_DEFAULTS
 )
 from django import forms
+from restorm import fields as rest_fields
 from restorm.fields.related import ToOneField, ToManyField
 from restorm.exceptions import RestException
 from rest_admin.forms import RestForm, restform_factory
 from rest_admin.widgets import ToManyFieldRawIdWidget
+
+
+# Defaults for restorm fields. ModelAdmin subclasses can change this
+# by adding to ModelAdmin.formfield_overrides.
+# Leaving commented lines for currently unsupported fields
+FORMFIELD_FOR_DBFIELD_DEFAULTS.update({
+    rest_fields.DateTimeField: {
+        # 'form_class': forms.SplitDateTimeField,
+        'widget': widgets.AdminSplitDateTime
+    },
+    rest_fields.DateField: {'widget': widgets.AdminDateWidget},
+    # rest_fields.TimeField: {'widget': widgets.AdminTimeWidget},
+    # rest_fields.TextField: {'widget': widgets.AdminTextareaWidget},
+    rest_fields.URLField: {'widget': widgets.AdminURLFieldWidget},
+    rest_fields.IntegerField: {'widget': widgets.AdminIntegerFieldWidget},
+    # rest_fields.BigIntegerField: {'widget': widgets.AdminBigIntegerFieldWidget},
+    rest_fields.CharField: {'widget': widgets.AdminTextInputWidget},
+    # rest_fields.ImageField: {'widget': widgets.AdminFileWidget},
+    # rest_fields.FileField: {'widget': widgets.AdminFileWidget},
+    # rest_fields.EmailField: {'widget': widgets.AdminEmailInputWidget},
+})
 
 
 class RestAdmin(ModelAdmin):
