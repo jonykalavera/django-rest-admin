@@ -1,9 +1,9 @@
-import mock
+# -*- coding: utf-8 -*-
 from django.contrib.admin.options import (
     ModelAdmin, TO_FIELD_VAR, IS_POPUP_VAR,
     csrf_protect_m, DisallowedModelAdminToField,
-    PermissionDenied, unquote, Http404, force_text, reverse, escape,
-    all_valid, helpers, _, InlineModelAdmin, widgets, get_ul_class,
+    PermissionDenied, unquote, Http404, force_text, escape, _,
+    InlineModelAdmin, widgets, get_ul_class,
     FORMFIELD_FOR_DBFIELD_DEFAULTS
 )
 from restorm import fields as rest_fields
@@ -23,11 +23,12 @@ FORMFIELD_FOR_DBFIELD_DEFAULTS.update({
     },
     rest_fields.DateField: {'widget': widgets.AdminDateWidget},
     # rest_fields.TimeField: {'widget': widgets.AdminTimeWidget},
-    # rest_fields.TextField: {'widget': widgets.AdminTextareaWidget},
+    rest_fields.TextField: {'widget': widgets.AdminTextareaWidget},
     rest_fields.URLField: {'widget': widgets.AdminURLFieldWidget},
     rest_fields.IntegerField: {'widget': widgets.AdminIntegerFieldWidget},
     # rest_fields.BigIntegerField: {'widget': widgets.AdminBigIntegerFieldWidget},
     rest_fields.CharField: {'widget': widgets.AdminTextInputWidget},
+    rest_fields.JSONField: {'widget': widgets.AdminTextareaWidget},
     # rest_fields.ImageField: {'widget': widgets.AdminFileWidget},
     # rest_fields.FileField: {'widget': widgets.AdminFileWidget},
     # rest_fields.EmailField: {'widget': widgets.AdminEmailInputWidget},
