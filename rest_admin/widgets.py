@@ -1,9 +1,9 @@
 from django.contrib.admin.widgets import (
     mark_safe, RelatedFieldWidgetWrapper,
-    CASCADE, render_to_string
+    CASCADE, render_to_string, force_text
 )
 from django.contrib.admin.widgets import \
-    ForeignKeyRawIdWidget as ForeignKeyRawIdWidget
+    ForeignKeyRawIdWidget, ManyToManyRawIdWidget
 from restorm.resource import Resource
 
 
@@ -65,8 +65,37 @@ class RelatedResourceWidgetWrapper(RelatedFieldWidgetWrapper):
         return mark_safe(render_to_string(self.template, context))
 
 
-class ToManyFieldRawIdWidget(ForeignKeyRawIdWidget):
+class ToOneFieldRawIdWidget(ForeignKeyRawIdWidget):
     def render(self, name, value, attrs=None):
         if isinstance(value, Resource):
             value = value.pk
-        return super(ToManyFieldRawIdWidget, self).render(name, value, attrs)
+        return super(ToOneFieldRawIdWidget, self).render(name, value, attrs)
+
+
+class ToManyRawIdWidget(ManyToManyRawIdWidget):
+    """
+    A Widget for displaying ManyToMany ids in the "raw_id" interface rather than
+    in a <select multiple> box.
+    """
+    def render(self, name, value, attrs=None):
+        if attrs is None:
+            attrs = {}
+        if self.rel.to in self.admin_site._registry:
+            # The related object is registered with the same AdminSite
+            attrs['class'] = 'vManyToManyRawIdAdminField'
+        if value:
+            value = ','.join(force_text(v) for v in value)
+        else:
+            value = ''
+        return super(ToManyRawIdWidget, self).render(name, value, attrs)
+
+    def url_parameters(self):
+        return self.base_url_parameters()
+
+    def label_for_value(self, value):
+        return ''
+
+    def value_from_datadict(self, data, files, name):
+        value = data.get(name)
+        if value:
+            return value.split(',')

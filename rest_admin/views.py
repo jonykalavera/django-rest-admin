@@ -47,8 +47,6 @@ class RestChangeList(ChangeList):
         self.multi_page = multi_page
         self.paginator = paginator
 
-    # def get_queryset(self, request):
-    #     return self.model.objects.get_queryset()
 
     def get_queryset(self, request):
         # First, we collect all the declared list filters.

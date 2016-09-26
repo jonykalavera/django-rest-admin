@@ -153,8 +153,11 @@ def resource_to_dict(instance, fields=None, exclude=None):
             else:
                 # MultipleChoiceWidget needs a list of pks, not object instances.
                 qs = f.value_from_object(instance)
-                if qs._result_cache is not None:
-                    data[f.name] = [item.pk for item in qs]
+                if (hasattr(qs, '_result_cache') and qs._result_cache is not None) or isinstance(qs, list):
+                    try:
+                        data[f.name] = [item.pk for item in qs]
+                    except AttributeError:
+                        data[f.name] = qs
                 else:
                     data[f.name] = list(qs.values_list('pk', flat=True))
         else:
