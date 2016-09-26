@@ -58,9 +58,11 @@ class RestAdmin(ModelAdmin):
         """
         Hook for specifying fields.
         """
-        # FIXME
-        return [
-            k for k, v in self.opts._fields.items() if v.editable]
+        if self.fields:
+            return self.fields
+        form = self.get_form(request, obj, fields=None)
+        return list(form.base_fields) + list(self.get_readonly_fields(request, obj))
+        # return [k for k, v in self.opts._fields.items() if v.editable]
 
     def render_change_form(self, *args, **kwargs):
         class ContentType:
@@ -115,6 +117,7 @@ class RestAdmin(ModelAdmin):
                     current_app=self.admin_site.name))
 
         ModelForm = self.get_form(request, obj)
+
         if request.method == 'POST':
             form = ModelForm(request.POST, request.FILES, instance=obj)
             if form.is_valid():
