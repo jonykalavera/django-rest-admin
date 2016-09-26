@@ -1,8 +1,9 @@
+# -*- coding: utf-8 -*-
 from django.contrib.admin.options import (
     ModelAdmin, TO_FIELD_VAR, IS_POPUP_VAR,
     csrf_protect_m, DisallowedModelAdminToField,
-    PermissionDenied, unquote, Http404, force_text, escape,
-    _, InlineModelAdmin, widgets, get_ul_class,
+    PermissionDenied, unquote, Http404, force_text, escape, _,
+    InlineModelAdmin, widgets, get_ul_class,
     FORMFIELD_FOR_DBFIELD_DEFAULTS, transaction, reverse, all_valid, helpers
 )
 from django.forms.widgets import SelectMultiple, CheckboxSelectMultiple
@@ -29,6 +30,7 @@ FORMFIELD_FOR_DBFIELD_DEFAULTS.update({
     rest_fields.IntegerField: {'widget': widgets.AdminIntegerFieldWidget},
     # rest_fields.BigIntegerField: {'widget': widgets.AdminBigIntegerFieldWidget},
     rest_fields.CharField: {'widget': widgets.AdminTextInputWidget},
+    rest_fields.JSONField: {'widget': widgets.AdminTextareaWidget},
     # rest_fields.ImageField: {'widget': widgets.AdminFileWidget},
     # rest_fields.FileField: {'widget': widgets.AdminFileWidget},
     # rest_fields.EmailField: {'widget': widgets.AdminEmailInputWidget},
@@ -303,7 +305,7 @@ class RestAdmin(ModelAdmin):
         db = kwargs.get('using')
 
         if db_field.name in self.raw_id_fields:
-            kwargs['widget'] = rest_admin_widgets.ToManyRawIdWidget(
+            kwargs['widget'] = rest_admin_widgets.ToManyFieldRawIdWidget(
                 db_field.rel, self.admin_site, using=db)
             kwargs['help_text'] = ''
         elif db_field.name in (list(self.filter_vertical) + list(self.filter_horizontal)):

@@ -72,7 +72,7 @@ class ToOneFieldRawIdWidget(ForeignKeyRawIdWidget):
         return super(ToOneFieldRawIdWidget, self).render(name, value, attrs)
 
 
-class ToManyRawIdWidget(ManyToManyRawIdWidget):
+class ToManyFieldRawIdWidget(ManyToManyRawIdWidget):
     """
     A Widget for displaying ManyToMany ids in the "raw_id" interface rather than
     in a <select multiple> box.
@@ -87,7 +87,7 @@ class ToManyRawIdWidget(ManyToManyRawIdWidget):
             value = ','.join(force_text(v) for v in value)
         else:
             value = ''
-        return super(ToManyRawIdWidget, self).render(name, value, attrs)
+        return super(ToManyFieldRawIdWidget, self).render(name, value, attrs)
 
     def url_parameters(self):
         return self.base_url_parameters()
