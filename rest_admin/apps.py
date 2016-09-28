@@ -82,8 +82,9 @@ class RestAdminConfig(SimpleAdminConfig):
                     )
                 ]
             elif not issubclass(inline.model, (models.Model, Resource)):
-                return checks.must_be('a Model', option='%s.model' % inline_label,
-                               obj=cls, id='admin.E106')
+                return checks.must_be(
+                    'a Model or Resource', option='%s.model' % inline_label,
+                    obj=cls, id='admin.E106')
             else:
                 return inline.check(model)
         checks.ModelAdminChecks._check_inlines_item = _check_inlines_item

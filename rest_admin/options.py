@@ -133,7 +133,6 @@ class RestAdmin(ModelAdmin):
             if type(new_object.data) != dict:
                 new_object.data = new_object.data.data
             formsets, inline_instances = self._create_formsets(request, new_object, change=not add)
-            # assert all_valid(formsets), [[f.fields['id'] for f in fs.forms] for fs in formsets]
             if all_valid(formsets) and form_validated:
                 try:
                     self.save_model(request, new_object, form, not add)
@@ -192,6 +191,36 @@ class RestAdmin(ModelAdmin):
 
         return self.render_change_form(request, context, add=add, change=not add, obj=obj, form_url=form_url)
 
+    def _create_formsets(self, request, obj, change):
+        "Helper function to generate formsets for add/change_view."
+        formsets = []
+        inline_instances = []
+        prefixes = {}
+        get_formsets_args = [request]
+        if change:
+            get_formsets_args.append(obj)
+        for FormSet, inline in self.get_formsets_with_inlines(*get_formsets_args):
+            prefix = FormSet.get_default_prefix()
+            prefixes[prefix] = prefixes.get(prefix, 0) + 1
+            if prefixes[prefix] != 1 or not prefix:
+                prefix = "%s-%s" % (prefix, prefixes[prefix])
+            formset_params = {
+                'instance': obj,
+                'prefix': prefix,
+                'queryset': inline.get_queryset(request),
+            }
+            if request.method == 'POST':
+                formset_params.update({
+                    'data': request.POST,
+                    'files': request.FILES,
+                    'save_as_new': '_saveasnew' in request.POST
+                })
+
+            formset = FormSet(**formset_params)
+            formsets.append(formset)
+            inline_instances.append(inline)
+        return formsets, inline_instances
+
     def log_deletion(self, *args, **kwargs):
         pass
 
@@ -229,7 +258,7 @@ class RestAdmin(ModelAdmin):
 
         # Populate deleted_objects, a data structure of all related objects that
         # will also be deleted.
-        deleted_objects, model_count, perms_needed, protected = [obj], {self.model.__name__:1}, [], []
+        deleted_objects, model_count, perms_needed, protected = [obj], {self.model.__name__: 1}, [], []
 
         if request.POST:  # The user has already confirmed the deletion.
             if perms_needed:
@@ -388,28 +417,28 @@ class InlineRestAdmin(InlineModelAdmin):
                 just using a generic "deletion_field" of the InlineModelAdmin.
                 """
                 if self.cleaned_data.get(DELETION_FIELD_NAME, False):
-                    using = router.db_for_write(self._meta.model)
-                    collector = NestedObjects(using=using)
+                    # using = router.db_for_write(self._meta.model)
+                    # collector = NestedObjects(using=using)
                     if self.instance.pk is None:
                         return
-                    collector.collect([self.instance])
-                    if collector.protected:
-                        objs = []
-                        for p in collector.protected:
-                            objs.append(
-                                # Translators: Model verbose name and instance representation,
-                                # suitable to be an item in a list.
-                                _('%(class_name)s %(instance)s') % {
-                                    'class_name': p._meta.verbose_name,
-                                    'instance': p}
-                            )
-                        params = {'class_name': self._meta.model._meta.verbose_name,
-                                  'instance': self.instance,
-                                  'related_objects': get_text_list(objs, _('and'))}
-                        msg = _("Deleting %(class_name)s %(instance)s would require "
-                                "deleting the following protected related objects: "
-                                "%(related_objects)s")
-                        raise ValidationError(msg, code='deleting_protected', params=params)
+                    # collector.collect([self.instance])
+                    # if collector.protected:
+                    #     objs = []
+                    #     for p in collector.protected:
+                    #         objs.append(
+                    #             # Translators: Model verbose name and instance representation,
+                    #             # suitable to be an item in a list.
+                    #             _('%(class_name)s %(instance)s') % {
+                    #                 'class_name': p._meta.verbose_name,
+                    #                 'instance': p}
+                    #         )
+                    #     params = {'class_name': self._meta.model._meta.verbose_name,
+                    #               'instance': self.instance,
+                    #               'related_objects': get_text_list(objs, _('and'))}
+                    #     msg = _("Deleting %(class_name)s %(instance)s would require "
+                    #             "deleting the following protected related objects: "
+                    #             "%(related_objects)s")
+                    #     raise ValidationError(msg, code='deleting_protected', params=params)
 
             def is_valid(self):
                 result = super(DeleteProtectedModelForm, self).is_valid()
@@ -420,7 +449,6 @@ class InlineRestAdmin(InlineModelAdmin):
 
         if defaults['fields'] is None and not modelform_defines_fields(defaults['form']):
             defaults['fields'] = forms.ALL_FIELDS
-
         return inlinerestformset_factory(self.parent_model, self.model, **defaults)
 
 

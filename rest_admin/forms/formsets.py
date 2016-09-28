@@ -4,11 +4,12 @@ from django.core.exceptions import (
 )
 from django.forms.formsets import formset_factory
 from django.forms.models import (
-    BaseModelFormSet, BaseInlineFormSet, ModelChoiceField
+    BaseModelFormSet, BaseInlineFormSet, InlineForeignKeyField, capfirst
 )
 from django.forms.widgets import HiddenInput
 from rest_admin.utils import patch
 from rest_admin.forms.resources import RestForm, restform_factory
+from rest_admin.forms.fields import ResourceChoiceField
 
 
 def _get_foreign_key(parent_model, model, fk_name=None, can_fail=False):
@@ -69,12 +70,70 @@ def _get_foreign_key(parent_model, model, fk_name=None, can_fail=False):
     return fk
 
 
-class ResourceChoiceField(ModelChoiceField):
-    def validate(self, value):
-        return super(ResourceChoiceField, self).validate(value)
+class BaseRestFormSet(BaseModelFormSet):
+    def add_fields(self, form, index):
+        from restorm.fields import ToOneField
+        with patch('django.db.models.ForeignKey', ToOneField):
+            with patch('django.forms.models.ModelChoiceField', ResourceChoiceField):
+                result = super(BaseRestFormSet, self).add_fields(form, index)
+        return result
+
+    def _existing_object(self, pk):
+        if not hasattr(self, '_object_dict'):
+            self._object_dict = {unicode(o.pk): o for o in self.get_queryset()}
+        return self._object_dict.get(unicode(pk))
+
+    # def _construct_form(self, i, **kwargs):
+    #     if self.is_bound and i < self.initial_form_count():
+    #         pk_key = "%s-%s" % (self.add_prefix(i), self.model._meta.pk.name)
+    #         pk = self.data[pk_key]
+    #         pk_field = self.model._meta.pk
+    #         to_python = self._get_to_python(pk_field)
+    #         pk = to_python(pk)
+    #         kwargs['instance'] = self._existing_object(pk)
+    #     if i < self.initial_form_count() and 'instance' not in kwargs:
+    #         kwargs['instance'] = self.get_queryset()[i]
+    #     if i >= self.initial_form_count() and self.initial_extra:
+    #         # Set initial values for extra forms
+    #         try:
+    #             kwargs['initial'] = self.initial_extra[i - self.initial_form_count()]
+    #         except IndexError:
+    #             pass
+    #     return super(BaseModelFormSet, self)._construct_form(i, **kwargs)
 
 
-class BaseInlineRestFormSet(BaseInlineFormSet):
+def restformset_factory(model, form=RestForm, formfield_callback=None,
+                        formset=BaseRestFormSet, extra=1, can_delete=False,
+                        can_order=False, max_num=None, fields=None, exclude=None,
+                        widgets=None, validate_max=False, localized_fields=None,
+                        labels=None, help_texts=None, error_messages=None,
+                        min_num=None, validate_min=False):
+    """
+    Returns a FormSet class for the given Django model class.
+    """
+    meta = getattr(form, 'Meta', None)
+    if meta is None:
+        meta = type(str('Meta'), (object,), {})
+    if (getattr(meta, 'fields', fields) is None and
+            getattr(meta, 'exclude', exclude) is None):
+        raise ImproperlyConfigured(
+            "Calling modelformset_factory without defining 'fields' or "
+            "'exclude' explicitly is prohibited."
+        )
+
+    form = restform_factory(model, form=form, fields=fields, exclude=exclude,
+                            formfield_callback=formfield_callback,
+                            widgets=widgets, localized_fields=localized_fields,
+                            labels=labels, help_texts=help_texts,
+                            error_messages=error_messages)
+    FormSet = formset_factory(form, formset, extra=extra, min_num=min_num, max_num=max_num,
+                              can_order=can_order, can_delete=can_delete,
+                              validate_min=validate_min, validate_max=validate_max)
+    FormSet.model = model
+    return FormSet
+
+
+class BaseInlineRestFormSet(BaseRestFormSet):
     def __init__(self, data=None, files=None, instance=None,
                  save_as_new=False, prefix=None, queryset=None, **kwargs):
         if instance is None:
@@ -88,11 +147,16 @@ class BaseInlineRestFormSet(BaseInlineFormSet):
             qs = queryset.filter(**{self.fk.name: self.instance.pk})
         else:
             qs = queryset.none()
-        super(BaseInlineFormSet, self).__init__(data, files, prefix=prefix,
-                                                queryset=qs, **kwargs)
+        super(BaseInlineRestFormSet, self).__init__(
+            data, files, prefix=prefix, queryset=qs, **kwargs)
+
+    def initial_form_count(self):
+        if self.save_as_new:
+            return 0
+        return super(BaseInlineRestFormSet, self).initial_form_count()
 
     def _construct_form(self, i, **kwargs):
-        form = super(BaseInlineFormSet, self)._construct_form(i, **kwargs)
+        form = super(BaseInlineRestFormSet, self)._construct_form(i, **kwargs)
         if self.save_as_new:
             # Remove the primary key from the form's data, we are only
             # creating new instances
@@ -109,12 +173,64 @@ class BaseInlineRestFormSet(BaseInlineFormSet):
         setattr(form.instance, self.fk.get_attname(), fk_value)
         return form
 
+    @classmethod
+    def get_default_prefix(cls):
+        return cls.fk.rel.get_accessor_name(model=cls.model).replace('+', '')
+
+    def save_new(self, form, commit=True):
+        # Ensure the latest copy of the related instance is present on each
+        # form (it may have been saved after the formset was originally
+        # instantiated).
+        setattr(form.instance, self.fk.name, self.instance)
+        # Use commit=False so we can assign the parent key afterwards, then
+        # save the object.
+        obj = form.save(commit=False)
+        pk_value = getattr(self.instance, self.fk.rel.field_name)
+        setattr(obj, self.fk.get_attname(), getattr(pk_value, 'pk', pk_value))
+        if commit:
+            obj.save()
+        # form.save_m2m() can be called via the formset later on if commit=False
+        if commit and hasattr(form, 'save_m2m'):
+            form.save_m2m()
+        return obj
+
     def add_fields(self, form, index):
-        from restorm.fields import ToOneField
-        with patch('django.db.models.ForeignKey', ToOneField):
-            with patch('django.forms.models.ModelChoiceField', ResourceChoiceField):
-                result = super(BaseInlineRestFormSet, self).add_fields(form, index)
-        return result
+        super(BaseInlineRestFormSet, self).add_fields(form, index)
+        if self._pk_field == self.fk:
+            name = self._pk_field.name
+            kwargs = {'pk_field': True}
+        else:
+            # The foreign key field might not be on the form, so we poke at the
+            # Model field to get the label, since we need that for error messages.
+            name = self.fk.name
+            kwargs = {
+                'label': getattr(form.fields.get(name), 'label', capfirst(self.fk.verbose_name))
+            }
+            if self.fk.rel.field_name != self.fk.rel.to._meta.pk.name:
+                kwargs['to_field'] = self.fk.rel.field_name
+
+        # If we're adding a new object, ignore a parent's auto-generated key
+        # as it will be regenerated on the save request.
+        if self.instance._state.adding:
+            if kwargs.get('to_field') is not None:
+                to_field = self.instance._meta.get_field(kwargs['to_field'])
+            else:
+                to_field = self.instance._meta.pk
+            if to_field.has_default():
+                setattr(self.instance, to_field.attname, None)
+
+        form.fields[name] = InlineForeignKeyField(self.instance, **kwargs)
+
+        # Add the generated field to form._meta.fields if it's defined to make
+        # sure validation isn't skipped on that field.
+        if form._meta.fields:
+            if isinstance(form._meta.fields, tuple):
+                form._meta.fields = list(form._meta.fields)
+            form._meta.fields.append(self.fk.name)
+
+    def get_unique_error_message(self, unique_check):
+        unique_check = [field for field in unique_check if field != self.fk.name]
+        return super(BaseInlineRestFormSet, self).get_unique_error_message(unique_check)
 
 
 def inlinerestformset_factory(
@@ -155,77 +271,4 @@ def inlinerestformset_factory(
     }
     FormSet = restformset_factory(model, **kwargs)
     FormSet.fk = fk
-    return FormSet
-
-
-class BaseRestFormSet(BaseModelFormSet):
-    def add_fields(self, form, index):
-        """Add a hidden field for the object's primary key."""
-        from django.db.models import AutoField
-        from restorm.fields import ToOneField
-        self._pk_field = pk = self.model._meta.pk
-        # If a pk isn't editable, then it won't be on the form, so we need to
-        # add it here so we can tell which object is which when we get the
-        # data back. Generally, pk.editable should be false, but for some
-        # reason, auto_created pk fields and AutoField's editable attribute is
-        # True, so check for that as well.
-
-        def pk_is_not_editable(pk):
-            return ((not pk.editable) or (pk.auto_created or isinstance(pk, AutoField))
-                or (pk.rel and pk.rel.parent_link and pk_is_not_editable(pk.rel.to._meta.pk)))
-        if pk_is_not_editable(pk) or pk.name not in form.fields:
-            if form.is_bound:
-                # If we're adding the related instance, ignore its primary key
-                # as it could be an auto-generated default which isn't actually
-                # in the database.
-                pk_value = None if form.instance._state.adding else form.instance.pk
-            else:
-                try:
-                    if index is not None:
-                        pk_value = self.get_queryset()[index].pk
-                    else:
-                        pk_value = None
-                except IndexError:
-                    pk_value = None
-            if isinstance(pk, ToOneField):
-                qs = pk.rel.to._default_manager.get_queryset()
-            else:
-                qs = self.model._default_manager.get_queryset()
-            qs = qs.using(form.instance._state.db)
-            if form._meta.widgets:
-                widget = form._meta.widgets.get(self._pk_field.name, HiddenInput)
-            else:
-                widget = HiddenInput
-            form.fields[self._pk_field.name] = ModelChoiceField(qs, initial=pk_value, required=False, widget=widget)
-        super(BaseModelFormSet, self).add_fields(form, index)
-
-
-def restformset_factory(model, form=RestForm, formfield_callback=None,
-                        formset=BaseRestFormSet, extra=1, can_delete=False,
-                        can_order=False, max_num=None, fields=None, exclude=None,
-                        widgets=None, validate_max=False, localized_fields=None,
-                        labels=None, help_texts=None, error_messages=None,
-                        min_num=None, validate_min=False):
-    """
-    Returns a FormSet class for the given Django model class.
-    """
-    meta = getattr(form, 'Meta', None)
-    if meta is None:
-        meta = type(str('Meta'), (object,), {})
-    if (getattr(meta, 'fields', fields) is None and
-            getattr(meta, 'exclude', exclude) is None):
-        raise ImproperlyConfigured(
-            "Calling modelformset_factory without defining 'fields' or "
-            "'exclude' explicitly is prohibited."
-        )
-
-    form = restform_factory(model, form=form, fields=fields, exclude=exclude,
-                            formfield_callback=formfield_callback,
-                            widgets=widgets, localized_fields=localized_fields,
-                            labels=labels, help_texts=help_texts,
-                            error_messages=error_messages)
-    FormSet = formset_factory(form, formset, extra=extra, min_num=min_num, max_num=max_num,
-                              can_order=can_order, can_delete=can_delete,
-                              validate_min=validate_min, validate_max=validate_max)
-    FormSet.model = model
     return FormSet
