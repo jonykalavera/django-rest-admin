@@ -3,71 +3,15 @@ from django.core.exceptions import (
     ImproperlyConfigured,
 )
 from django.forms.formsets import formset_factory
+from django.forms.models import _get_foreign_key as _dj_get_foreign_key
 from django.forms.models import (
     BaseModelFormSet, BaseInlineFormSet, InlineForeignKeyField, capfirst
 )
 from django.forms.widgets import HiddenInput
+
 from rest_admin.utils import patch
 from rest_admin.forms.resources import RestForm, restform_factory
 from rest_admin.forms.fields import ResourceChoiceField
-
-
-def _get_foreign_key(parent_model, model, fk_name=None, can_fail=False):
-    """
-    Finds and returns the ForeignKey from model to parent if there is one
-    (returns None if can_fail is True and no such field exists). If fk_name is
-    provided, assume it is the name of the ForeignKey field. Unless can_fail is
-    True, an exception is raised if there is no ForeignKey from model to
-    parent_model.
-    """
-    # avoid circular import
-    from restorm.fields import ToOneField
-    opts = model._meta
-    if fk_name:
-        fks_to_parent = [f for f in opts.fields if f.name == fk_name]
-        if len(fks_to_parent) == 1:
-            fk = fks_to_parent[0]
-            if not isinstance(fk, ToOneField) or \
-                    (fk.rel.to != parent_model and
-                     fk.rel.to not in parent_model._meta.get_parent_list()):
-                raise ValueError(
-                    "fk_name '%s' is not a ToOneField to '%s.%s'."
-                    % (fk_name, parent_model._meta.app_label, parent_model._meta.object_name))
-        elif len(fks_to_parent) == 0:
-            raise ValueError(
-                "'%s.%s' has no field named '%s'."
-                % (model._meta.app_label, model._meta.object_name, fk_name))
-    else:
-        # Try to discover what the ForeignKey from model to parent_model is
-        fks_to_parent = [
-            f for f in opts.fields
-            if isinstance(f, ToOneField)
-            and (f.rel.to == parent_model
-                or f.rel.to in parent_model._meta.get_parent_list())
-        ]
-        if len(fks_to_parent) == 1:
-            fk = fks_to_parent[0]
-        elif len(fks_to_parent) == 0:
-            if can_fail:
-                return
-            raise ValueError(
-                "'%s.%s' has no ToOneField to '%s.%s'." % (
-                    model._meta.app_label,
-                    model._meta.object_name,
-                    parent_model._meta.app_label,
-                    parent_model._meta.object_name,
-                )
-            )
-        else:
-            raise ValueError(
-                "'%s.%s' has more than one ToOneField to '%s.%s'." % (
-                    model._meta.app_label,
-                    model._meta.object_name,
-                    parent_model._meta.app_label,
-                    parent_model._meta.object_name,
-                )
-            )
-    return fk
 
 
 class BaseRestFormSet(BaseModelFormSet):
@@ -82,24 +26,6 @@ class BaseRestFormSet(BaseModelFormSet):
         if not hasattr(self, '_object_dict'):
             self._object_dict = {unicode(o.pk): o for o in self.get_queryset()}
         return self._object_dict.get(unicode(pk))
-
-    # def _construct_form(self, i, **kwargs):
-    #     if self.is_bound and i < self.initial_form_count():
-    #         pk_key = "%s-%s" % (self.add_prefix(i), self.model._meta.pk.name)
-    #         pk = self.data[pk_key]
-    #         pk_field = self.model._meta.pk
-    #         to_python = self._get_to_python(pk_field)
-    #         pk = to_python(pk)
-    #         kwargs['instance'] = self._existing_object(pk)
-    #     if i < self.initial_form_count() and 'instance' not in kwargs:
-    #         kwargs['instance'] = self.get_queryset()[i]
-    #     if i >= self.initial_form_count() and self.initial_extra:
-    #         # Set initial values for extra forms
-    #         try:
-    #             kwargs['initial'] = self.initial_extra[i - self.initial_form_count()]
-    #         except IndexError:
-    #             pass
-    #     return super(BaseModelFormSet, self)._construct_form(i, **kwargs)
 
 
 def restformset_factory(model, form=RestForm, formfield_callback=None,
@@ -233,42 +159,18 @@ class BaseInlineRestFormSet(BaseRestFormSet):
         return super(BaseInlineRestFormSet, self).get_unique_error_message(unique_check)
 
 
-def inlinerestformset_factory(
-        parent_model, model, form=RestForm,
-        formset=BaseInlineRestFormSet, fk_name=None,
-        fields=None, exclude=None, extra=3, can_order=False,
-        can_delete=True, max_num=None, formfield_callback=None,
-        widgets=None, validate_max=False, localized_fields=None,
-        labels=None, help_texts=None, error_messages=None,
-        min_num=None, validate_min=False):
-    """
-    Returns an ``InlineFormSet`` for the given kwargs.
-    You must provide ``fk_name`` if ``model`` has more than one ``ForeignKey``
-    to ``parent_model``.
-    """
-    fk = _get_foreign_key(parent_model, model, fk_name=fk_name)
-    # enforce a max_num=1 when the foreign key to the parent model is unique.
-    if fk.unique:
-        max_num = 1
-    kwargs = {
-        'form': form,
-        'formfield_callback': formfield_callback,
-        'formset': formset,
-        'extra': extra,
-        'can_delete': can_delete,
-        'can_order': can_order,
-        'fields': fields,
-        'exclude': exclude,
-        'min_num': min_num,
-        'max_num': max_num,
-        'widgets': widgets,
-        'validate_min': validate_min,
-        'validate_max': validate_max,
-        'localized_fields': localized_fields,
-        'labels': labels,
-        'help_texts': help_texts,
-        'error_messages': error_messages,
-    }
-    FormSet = restformset_factory(model, **kwargs)
-    FormSet.fk = fk
-    return FormSet
+def inlinerestformset_factory(*args, **kwargs):
+    from django.forms.models import ModelForm
+    from django.forms.models import inlineformset_factory as _dj_inlineformset_factory
+    if kwargs.get('form') == ModelForm:
+        kwargs['forms'] = RestForm
+    with patch('django.forms.models.ModelForm', RestForm):
+        with patch('django.forms.models.BaseInlineFormSet', BaseRestFormSet):
+            with patch('django.forms.models._get_foreign_key', _get_foreign_key):
+                return _dj_inlineformset_factory(*args, **kwargs)
+
+
+def _get_foreign_key(*args, **kwargs):
+    from restorm.fields import ToOneField
+    with patch('django.db.models.ForeignKey', ToOneField):
+        return _dj_get_foreign_key(*args, **kwargs)
