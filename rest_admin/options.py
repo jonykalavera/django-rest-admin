@@ -5,8 +5,7 @@ from django.contrib.admin.options import (
     PermissionDenied, unquote, Http404, force_text, escape, _,
     InlineModelAdmin, widgets, get_ul_class,
     FORMFIELD_FOR_DBFIELD_DEFAULTS, transaction, reverse, all_valid, helpers,
-    flatten_fieldsets, partial, DELETION_FIELD_NAME, string_concat, router,
-    NestedObjects, get_text_list, ValidationError, modelform_defines_fields,
+    flatten_fieldsets, partial, DELETION_FIELD_NAME, string_concat, modelform_defines_fields,
     forms
 )
 from django.forms.widgets import SelectMultiple, CheckboxSelectMultiple
@@ -42,7 +41,75 @@ FORMFIELD_FOR_DBFIELD_DEFAULTS.update({
 })
 
 
-class RestAdmin(ModelAdmin):
+class RestAdminBase(object):
+    def formfield_for_dbfield(self, db_field, **kwargs):
+        with patch('django.db.models.ForeignKey', ToOneField):
+            with patch('django.db.models.ManyToManyField', ToManyField):
+                return super(RestAdminBase, self).formfield_for_dbfield(
+                    db_field, **kwargs)
+
+    def formfield_for_foreignkey(self, db_field, request=None, **kwargs):
+        """
+        Get a form Field for a ForeignKey.
+        """
+        # with patch(
+        #         'django.contrib.admin.widgets.ForeignKeyRawIdWidget',
+        #         rest_admin_widgets.ToManyFieldRawIdWidget):
+        #     return super(RestAdmin, self).formfield_for_foreignkey(
+        #         db_field, request, **kwargs)
+
+        db = kwargs.get('using')
+        if db_field.name in self.raw_id_fields:
+            kwargs['widget'] = rest_admin_widgets.ToOneFieldRawIdWidget(
+                db_field.rel, self.admin_site, using=db)
+        elif db_field.name in self.radio_fields:
+            kwargs['widget'] = widgets.AdminRadioSelect(attrs={
+                'class': get_ul_class(self.radio_fields[db_field.name]),
+            })
+            kwargs['empty_label'] = _('None') if db_field.blank else None
+
+        if 'queryset' not in kwargs:
+            queryset = self.get_field_queryset(db, db_field, request)
+            if queryset is not None:
+                kwargs['queryset'] = queryset
+
+        return db_field.formfield(**kwargs)
+
+    def formfield_for_manytomany(self, db_field, request=None, **kwargs):
+        """
+        Get a form Field for a ManyToManyField.
+        """
+        # If it uses an intermediary model that isn't auto created, don't show
+        # a field in admin.
+        if hasattr(db_field.rel, 'through') and db_field.rel.through:
+            return None
+        db = kwargs.get('using')
+
+        if db_field.name in self.raw_id_fields:
+            kwargs['widget'] = rest_admin_widgets.ToManyFieldRawIdWidget(
+                db_field.rel, self.admin_site, using=db)
+            kwargs['help_text'] = ''
+        elif db_field.name in (list(self.filter_vertical) + list(self.filter_horizontal)):
+            kwargs['widget'] = widgets.FilteredSelectMultiple(
+                db_field.verbose_name,
+                db_field.name in self.filter_vertical
+            )
+
+        if 'queryset' not in kwargs:
+            queryset = self.get_field_queryset(db, db_field, request)
+            if queryset is not None:
+                kwargs['queryset'] = queryset
+
+        form_field = db_field.formfield(**kwargs)
+        if isinstance(form_field.widget, SelectMultiple) and \
+                not isinstance(form_field.widget, CheckboxSelectMultiple):
+            msg = _('Hold down "Control", or "Command" on a Mac, to select more than one.')
+            help_text = form_field.help_text
+            form_field.help_text = string_concat(help_text, ' ', msg) if help_text else msg
+        return form_field
+
+
+class RestAdmin(RestAdminBase, ModelAdmin):
     form = RestForm
 
     def get_actions(self, request):
@@ -58,15 +125,6 @@ class RestAdmin(ModelAdmin):
         """
         from rest_admin.views import RestChangeList
         return RestChangeList
-
-    # def get_fields(self, request, obj=None):
-    #     """
-    #     Hook for specifying fields.
-    #     """
-    #     if self.fields:
-    #         return self.fields
-    #     form = self.get_form(request, obj, fields=None)
-    #     return list(form.base_fields) + list(self.get_readonly_fields(request, obj))
 
     def render_change_form(self, *args, **kwargs):
         class ContentType:
@@ -298,81 +356,10 @@ class RestAdmin(ModelAdmin):
 
         return self.render_delete_form(request, context)
 
-    def formfield_for_dbfield(self, db_field, **kwargs):
-        with patch('django.db.models.ForeignKey', ToOneField):
-            with patch('django.db.models.ManyToManyField', ToManyField):
-                return super(RestAdmin, self).formfield_for_dbfield(
-                    db_field, **kwargs)
 
-    def formfield_for_foreignkey(self, db_field, request=None, **kwargs):
-        """
-        Get a form Field for a ForeignKey.
-        """
-        # with patch(
-        #         'django.contrib.admin.widgets.ForeignKeyRawIdWidget',
-        #         rest_admin_widgets.ToManyFieldRawIdWidget):
-        #     return super(RestAdmin, self).formfield_for_foreignkey(
-        #         db_field, request, **kwargs)
-
-        db = kwargs.get('using')
-        if db_field.name in self.raw_id_fields:
-            kwargs['widget'] = rest_admin_widgets.ToOneFieldRawIdWidget(
-                db_field.rel, self.admin_site, using=db)
-        elif db_field.name in self.radio_fields:
-            kwargs['widget'] = widgets.AdminRadioSelect(attrs={
-                'class': get_ul_class(self.radio_fields[db_field.name]),
-            })
-            kwargs['empty_label'] = _('None') if db_field.blank else None
-
-        if 'queryset' not in kwargs:
-            queryset = self.get_field_queryset(db, db_field, request)
-            if queryset is not None:
-                kwargs['queryset'] = queryset
-
-        return db_field.formfield(**kwargs)
-
-    def formfield_for_manytomany(self, db_field, request=None, **kwargs):
-        """
-        Get a form Field for a ManyToManyField.
-        """
-        # If it uses an intermediary model that isn't auto created, don't show
-        # a field in admin.
-        if hasattr(db_field.rel, 'through') and db_field.rel.through:
-            return None
-        db = kwargs.get('using')
-
-        if db_field.name in self.raw_id_fields:
-            kwargs['widget'] = rest_admin_widgets.ToManyFieldRawIdWidget(
-                db_field.rel, self.admin_site, using=db)
-            kwargs['help_text'] = ''
-        elif db_field.name in (list(self.filter_vertical) + list(self.filter_horizontal)):
-            kwargs['widget'] = widgets.FilteredSelectMultiple(
-                db_field.verbose_name,
-                db_field.name in self.filter_vertical
-            )
-
-        if 'queryset' not in kwargs:
-            queryset = self.get_field_queryset(db, db_field, request)
-            if queryset is not None:
-                kwargs['queryset'] = queryset
-
-        form_field = db_field.formfield(**kwargs)
-        if isinstance(form_field.widget, SelectMultiple) and not isinstance(form_field.widget, CheckboxSelectMultiple):
-            msg = _('Hold down "Control", or "Command" on a Mac, to select more than one.')
-            help_text = form_field.help_text
-            form_field.help_text = string_concat(help_text, ' ', msg) if help_text else msg
-        return form_field
-
-
-class InlineRestAdmin(InlineModelAdmin):
+class InlineRestAdmin(RestAdminBase, InlineModelAdmin):
     form = RestForm
     formset = BaseInlineRestFormSet
-
-    def formfield_for_dbfield(self, db_field, **kwargs):
-        with patch('django.db.models.ForeignKey', ToOneField):
-            with patch('django.db.models.ManyToManyField', ToManyField):
-                return super(InlineRestAdmin, self).formfield_for_dbfield(
-                    db_field, **kwargs)
 
     def get_formset(self, request, obj=None, **kwargs):
         """Returns a BaseInlineFormSet class for use in admin add/change views."""
