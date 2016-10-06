@@ -13,7 +13,7 @@ __all__ = [
     'ResourceChoiceField',
     # Resources
     'construct_instance', 'restform_factory', 'BaseRestForm', 'RestForm',
-    'fields_for_resource', 'save_instance', 'resource_to_dict', 'ResourceChoiceField',
+    'fields_for_resource', 'save_instance', 'resource_to_dict',
     # Formsets
     '_get_foreign_key', 'BaseRestFormSet', 'BaseInlineRestFormSet',
     'inlinerestformset_factory', 'restformset_factory'
