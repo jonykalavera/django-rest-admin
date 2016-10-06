@@ -5,7 +5,7 @@ from django.db import models
 
 from restorm.resource import Resource
 from restorm.fields.related import RelatedResource
-from rest_admin import forms as rest_admin_forms
+from restorm import forms as restorm_forms
 
 
 class RestAdminConfig(SimpleAdminConfig):
@@ -47,7 +47,7 @@ class RestAdminConfig(SimpleAdminConfig):
             """ Check that form subclasses BaseModelForm. """
 
             if hasattr(cls, 'form') and not issubclass(
-                    cls.form, (checks.BaseModelForm, rest_admin_forms.BaseRestForm)):
+                    cls.form, (checks.BaseModelForm, restorm_forms.BaseRestForm)):
                 return checks.must_inherit_from(
                     parent='BaseModelForm or BaseRestForm', option='form',
                     obj=cls, id='admin.E016')
@@ -92,7 +92,7 @@ class RestAdminConfig(SimpleAdminConfig):
         def _check_relation(self, cls, parent_model):
             if issubclass(parent_model, Resource):
                 try:
-                    rest_admin_forms._get_foreign_key(parent_model, cls.model, fk_name=cls.fk_name)
+                    restorm_forms._get_foreign_key(parent_model, cls.model, fk_name=cls.fk_name)
                 except ValueError as e:
                     return [checks.Error(e.args[0], hint=None, obj=cls, id='admin.E202')]
                 else:

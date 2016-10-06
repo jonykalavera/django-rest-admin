@@ -11,12 +11,13 @@ from django.contrib.admin.options import (
 from django.forms.widgets import SelectMultiple, CheckboxSelectMultiple
 from restorm import fields as rest_fields
 from restorm.fields.related import ToOneField, ToManyField
-from restorm.exceptions import RestValidationException
-from rest_admin.forms import (
+from restorm.forms import (
     RestForm, restform_factory, BaseInlineRestFormSet, inlinerestformset_factory
 )
+from restorm.exceptions import RestValidationException
+from restorm.utils import patch
+
 from rest_admin import widgets as rest_admin_widgets
-from rest_admin.utils import patch
 
 
 # Defaults for restorm fields. ModelAdmin subclasses can change this

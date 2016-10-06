@@ -1,7 +1,4 @@
-import sys
 from django.contrib.admin.utils import _get_non_gfk_field, FieldDoesNotExist
-from django.utils import six
-from django.utils.importlib import import_module
 
 
 def lookup_field(name, obj, model_admin=None):
@@ -31,30 +28,3 @@ def lookup_field(name, obj, model_admin=None):
         attr = None
         value = getattr(obj, name)
     return f, attr, value
-
-
-class patch(object):
-    def __init__(self, dotted_path, new):
-        self._dotted_path = dotted_path
-        self._new = new
-        try:
-            module_path, class_name = self._dotted_path.rsplit('.', 1)
-        except ValueError:
-            msg = "%s doesn't look like a module path" % dotted_path
-            six.reraise(ImportError, ImportError(msg), sys.exc_info()[2])
-        self._module_path = module_path
-        self._class_name = class_name
-        self._module = import_module(self._module_path)
-        try:
-            self._old = getattr(self._module, self._class_name)
-        except AttributeError:
-            msg = 'Module "%s" does not define a "%s" attribute/class' % (
-                self._module_path, self._class_name)
-            six.reraise(ImportError, ImportError(msg), sys.exc_info()[2])
-
-    def __enter__(self):
-        setattr(self._module, self._class_name, self._new)
-        return self._new
-
-    def __exit__(self, type, value, traceback):
-        setattr(self._module, self._class_name, self._old)
