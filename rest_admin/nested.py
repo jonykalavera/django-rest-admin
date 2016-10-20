@@ -1,9 +1,25 @@
-
-from django import VERSION
+"""
+Most of the code in this module is from https://github.com/s-block/django-nested-inline
+"""
+from django import VERSION, forms
+from django.core.exceptions import PermissionDenied
+from django.core.urlresolvers import reverse
 from django.conf import settings
-from django.contrib.admin.options import (_, all_valid, csrf_protect_m,
-      force_text, forms, helpers, static, transaction, unquote)
+from django.contrib.admin import helpers
+from django.contrib.admin.templatetags.admin_static import static
+from django.contrib.admin.utils import unquote
+from django.db import models, transaction
+from django.forms.formsets import all_valid
+from django.http import Http404
+from django.utils.decorators import method_decorator
+from django.utils.encoding import force_text
+from django.utils.html import escape
+from django.utils.translation import ugettext as _
+from django.views.decorators.csrf import csrf_protect
 from .options import InlineRestAdmin, RestAdmin
+
+csrf_protect_m = method_decorator(csrf_protect)
+
 
 class NestedRestAdmin(RestAdmin):
 
@@ -60,20 +76,25 @@ class NestedRestAdmin(RestAdmin):
                 InlineFormSet = nested_inline.get_formset(request, form.instance)
                 prefix = "%s-%s" % (form.prefix, InlineFormSet.get_default_prefix())
 
-                if request.method == 'POST' and any(s.startswith(prefix) for s in request.POST.keys()):
-                    nested_formset = InlineFormSet(request.POST, request.FILES,
+                if request.method == 'POST' and \
+                        any(s.startswith(prefix) for s in request.POST.keys()):
+                    nested_formset = InlineFormSet(
+                        request.POST, request.FILES,
                         instance=form.instance,
                         prefix=prefix, queryset=nested_inline.get_queryset(request))
                 else:
-                    nested_formset = InlineFormSet(instance=form.instance,
+                    nested_formset = InlineFormSet(
+                        instance=form.instance,
                         prefix=prefix, queryset=nested_inline.get_queryset(request))
                 nested_formsets.append(nested_formset)
                 if nested_inline.inlines:
-                    self.add_nested_inline_formsets(request, nested_inline, nested_formset, depth=depth+1)
+                    self.add_nested_inline_formsets(
+                        request, nested_inline, nested_formset, depth=depth+1)
             form.nested_formsets = nested_formsets
 
     def wrap_nested_inline_formsets(self, request, inline, formset):
         media = None
+
         def get_media(extra_media):
             if media:
                 return media + extra_media
@@ -82,7 +103,8 @@ class NestedRestAdmin(RestAdmin):
 
         for form in formset.forms:
             wrapped_nested_formsets = []
-            for nested_inline, nested_formset in zip(inline.get_inline_instances(request), form.nested_formsets):
+            for nested_inline, nested_formset in zip(
+                    inline.get_inline_instances(request), form.nested_formsets):
                 if form.instance.pk:
                     instance = form.instance
                 else:
@@ -90,12 +112,14 @@ class NestedRestAdmin(RestAdmin):
                 fieldsets = list(nested_inline.get_fieldsets(request))
                 readonly = list(nested_inline.get_readonly_fields(request))
                 prepopulated = dict(nested_inline.get_prepopulated_fields(request))
-                wrapped_nested_formset = helpers.InlineAdminFormSet(nested_inline, nested_formset,
+                wrapped_nested_formset = helpers.InlineAdminFormSet(
+                    nested_inline, nested_formset,
                     fieldsets, prepopulated, readonly, model_admin=self)
                 wrapped_nested_formsets.append(wrapped_nested_formset)
                 media = get_media(wrapped_nested_formset.media)
                 if nested_inline.inlines:
-                    media = get_media(self.wrap_nested_inline_formsets(request, nested_inline, nested_formset))
+                    media = get_media(
+                        self.wrap_nested_inline_formsets(request, nested_inline, nested_formset))
             form.nested_formsets = wrapped_nested_formsets
         return media
 
@@ -110,7 +134,6 @@ class NestedRestAdmin(RestAdmin):
                     if self.formset_has_nested_data(form.nested_formsets):
                         return True
 
-
     def all_valid_with_nesting(self, formsets):
         "Recursively validate all nested formsets"
         if not all_valid(formsets):
@@ -124,9 +147,11 @@ class NestedRestAdmin(RestAdmin):
                     if not self.all_valid_with_nesting(form.nested_formsets):
                         return False
 
-                    #TODO - find out why this breaks when extra = 1 and just adding new item with no sub items
-                    if (not hasattr(form, 'cleaned_data') or not form.cleaned_data) and self.formset_has_nested_data(form.nested_formsets):
-                        form._errors["__all__"] = form.error_class([u"Parent object must be created when creating nested inlines."])
+                    # TODO - find out why this breaks when extra = 1 and just adding new item with no sub items  # NOQA
+                    if (not hasattr(form, 'cleaned_data') or not form.cleaned_data) and \
+                            self.formset_has_nested_data(form.nested_formsets):
+                        form._errors["__all__"] = form.error_class(
+                            [u"Parent object must be created when creating nested inlines."])
                         return False
         return True
 
@@ -157,7 +182,8 @@ class NestedRestAdmin(RestAdmin):
                 prefixes[prefix] = prefixes.get(prefix, 0) + 1
                 if prefixes[prefix] != 1 or not prefix:
                     prefix = "%s-%s" % (prefix, prefixes[prefix])
-                formset = FormSet(data=request.POST, files=request.FILES,
+                formset = FormSet(
+                    data=request.POST, files=request.FILES,
                     instance=new_object,
                     save_as_new="_saveasnew" in request.POST,
                     prefix=prefix, queryset=inline.get_queryset(request))
@@ -197,13 +223,15 @@ class NestedRestAdmin(RestAdmin):
                 prefixes[prefix] = prefixes.get(prefix, 0) + 1
                 if prefixes[prefix] != 1 or not prefix:
                     prefix = "%s-%s" % (prefix, prefixes[prefix])
-                formset = FormSet(instance=self.model(), prefix=prefix,
+                formset = FormSet(
+                    instance=self.model(), prefix=prefix,
                     queryset=inline.get_queryset(request))
                 formsets.append(formset)
                 if hasattr(inline, 'inlines') and inline.inlines:
                     self.add_nested_inline_formsets(request, inline, formset)
 
-        adminForm = helpers.AdminForm(form, list(self.get_fieldsets(request)),
+        adminForm = helpers.AdminForm(
+            form, list(self.get_fieldsets(request)),
             self.get_prepopulated_fields(request),
             self.get_readonly_fields(request),
             model_admin=self)
@@ -214,8 +242,8 @@ class NestedRestAdmin(RestAdmin):
             fieldsets = list(inline.get_fieldsets(request))
             readonly = list(inline.get_readonly_fields(request))
             prepopulated = dict(inline.get_prepopulated_fields(request))
-            inline_admin_formset = helpers.InlineAdminFormSet(inline, formset,
-                fieldsets, prepopulated, readonly, model_admin=self)
+            inline_admin_formset = helpers.InlineAdminFormSet(
+                inline, formset, fieldsets, prepopulated, readonly, model_admin=self)
             inline_admin_formsets.append(inline_admin_formset)
             media = media + inline_admin_formset.media
             if hasattr(inline, 'inlines') and inline.inlines:
@@ -247,11 +275,12 @@ class NestedRestAdmin(RestAdmin):
             raise PermissionDenied
 
         if obj is None:
-            raise Http404(_('%(name)s object with primary key %(key)r does not exist.') % {'name': force_text(opts.verbose_name), 'key': escape(object_id)})
+            raise Http404(_('%(name)s object with primary key %(key)r does not exist.') % {
+                'name': force_text(opts.verbose_name), 'key': escape(object_id)})
 
         if request.method == 'POST' and "_saveasnew" in request.POST:
-            return self.add_view(request, form_url=reverse('admin:%s_%s_add' %
-                                                           (opts.app_label, opts.module_name),
+            return self.add_view(request, form_url=reverse(
+                'admin:%s_%s_add' % (opts.app_label, opts.module_name),
                 current_app=self.admin_site.name))
 
         ModelForm = self.get_form(request, obj)
@@ -271,7 +300,8 @@ class NestedRestAdmin(RestAdmin):
                 prefixes[prefix] = prefixes.get(prefix, 0) + 1
                 if prefixes[prefix] != 1 or not prefix:
                     prefix = "%s-%s" % (prefix, prefixes[prefix])
-                formset = FormSet(request.POST, request.FILES,
+                formset = FormSet(
+                    request.POST, request.FILES,
                     instance=new_object, prefix=prefix,
                     queryset=inline.get_queryset(request))
                 formsets.append(formset)
@@ -293,13 +323,15 @@ class NestedRestAdmin(RestAdmin):
                 prefixes[prefix] = prefixes.get(prefix, 0) + 1
                 if prefixes[prefix] != 1 or not prefix:
                     prefix = "%s-%s" % (prefix, prefixes[prefix])
-                formset = FormSet(instance=obj, prefix=prefix,
+                formset = FormSet(
+                    instance=obj, prefix=prefix,
                     queryset=inline.get_queryset(request))
                 formsets.append(formset)
                 if hasattr(inline, 'inlines') and inline.inlines:
                     self.add_nested_inline_formsets(request, inline, formset)
 
-        adminForm = helpers.AdminForm(form, self.get_fieldsets(request, obj),
+        adminForm = helpers.AdminForm(
+            form, self.get_fieldsets(request, obj),
             self.get_prepopulated_fields(request, obj),
             self.get_readonly_fields(request, obj),
             model_admin=self)
@@ -310,8 +342,8 @@ class NestedRestAdmin(RestAdmin):
             fieldsets = list(inline.get_fieldsets(request, obj))
             readonly = list(inline.get_readonly_fields(request, obj))
             prepopulated = dict(inline.get_prepopulated_fields(request, obj))
-            inline_admin_formset = helpers.InlineAdminFormSet(inline, formset,
-                fieldsets, prepopulated, readonly, model_admin=self)
+            inline_admin_formset = helpers.InlineAdminFormSet(
+                inline, formset, fieldsets, prepopulated, readonly, model_admin=self)
             inline_admin_formsets.append(inline_admin_formset)
             media = media + inline_admin_formset.media
             if hasattr(inline, 'inlines') and inline.inlines:
@@ -330,7 +362,6 @@ class NestedRestAdmin(RestAdmin):
             }
         context.update(extra_context or {})
         return self.render_change_form(request, context, change=True, obj=obj, form_url=form_url)
-
 
 
 class NestedInline(InlineRestAdmin):
