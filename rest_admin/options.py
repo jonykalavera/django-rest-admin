@@ -1,14 +1,27 @@
 # -*- coding: utf-8 -*-
+from functools import partial
+
+from django import forms
+from django.core.exceptions import PermissionDenied
+from django.core.urlresolvers import reverse
+from django.contrib.admin import helpers, widgets
+from django.contrib.admin.exceptions import DisallowedModelAdminToField
 from django.contrib.admin.options import (
-    ModelAdmin, TO_FIELD_VAR, IS_POPUP_VAR,
-    csrf_protect_m, DisallowedModelAdminToField,
-    PermissionDenied, unquote, Http404, force_text, escape, _,
-    InlineModelAdmin, widgets, get_ul_class,
-    FORMFIELD_FOR_DBFIELD_DEFAULTS, transaction, reverse, all_valid, helpers,
-    flatten_fieldsets, partial, DELETION_FIELD_NAME, string_concat, modelform_defines_fields,
-    forms
+    ModelAdmin, TO_FIELD_VAR, IS_POPUP_VAR, InlineModelAdmin, get_ul_class,
+    FORMFIELD_FOR_DBFIELD_DEFAULTS
 )
+from django.contrib.admin.utils import flatten_fieldsets, unquote
+from django.db import transaction
+from django.forms.formsets import DELETION_FIELD_NAME, all_valid
+from django.forms.models import modelform_defines_fields
 from django.forms.widgets import SelectMultiple, CheckboxSelectMultiple
+from django.http import Http404
+from django.utils.decorators import method_decorator
+from django.utils.encoding import force_text
+from django.utils.html import escape
+from django.utils.translation import string_concat, ugettext as _
+from django.views.decorators.csrf import csrf_protect
+
 from restorm import fields as rest_fields
 from restorm.fields.related import ToOneField, ToManyField
 from restorm.forms import (
@@ -19,6 +32,7 @@ from restorm.utils import patch
 
 from rest_admin import widgets as rest_admin_widgets
 
+csrf_protect_m = method_decorator(csrf_protect)
 
 # Defaults for restorm fields. ModelAdmin subclasses can change this
 # by adding to ModelAdmin.formfield_overrides.
@@ -53,12 +67,6 @@ class RestAdminBase(object):
         """
         Get a form Field for a ForeignKey.
         """
-        # with patch(
-        #         'django.contrib.admin.widgets.ForeignKeyRawIdWidget',
-        #         rest_admin_widgets.ToManyFieldRawIdWidget):
-        #     return super(RestAdmin, self).formfield_for_foreignkey(
-        #         db_field, request, **kwargs)
-
         db = kwargs.get('using')
         if db_field.name in self.raw_id_fields:
             kwargs['widget'] = rest_admin_widgets.ToOneFieldRawIdWidget(
@@ -189,8 +197,7 @@ class RestAdmin(RestAdminBase, ModelAdmin):
             else:
                 form_validated = False
                 new_object = form.instance
-            if type(new_object.data) != dict:
-                new_object.data = new_object.data.data
+
             formsets, inline_instances = self._create_formsets(request, new_object, change=not add)
             if all_valid(formsets) and form_validated:
                 try:
@@ -215,7 +222,8 @@ class RestAdmin(RestAdminBase, ModelAdmin):
             if add:
                 initial = self.get_changeform_initial_data(request)
                 form = ModelForm(initial=initial)
-                formsets, inline_instances = self._create_formsets(request, self.model(), change=False)
+                formsets, inline_instances = self._create_formsets(
+                    request, self.model(), change=False)
             else:
                 form = ModelForm(instance=obj)
                 formsets, inline_instances = self._create_formsets(request, obj, change=True)
@@ -232,7 +240,8 @@ class RestAdmin(RestAdminBase, ModelAdmin):
         for inline_formset in inline_formsets:
             media = media + inline_formset.media
 
-        context = dict(self.admin_site.each_context(request),
+        context = dict(
+            self.admin_site.each_context(request),
             title=(_('Add %s') if add else _('Change %s')) % force_text(opts.verbose_name),
             adminform=adminForm,
             object_id=object_id,
@@ -248,7 +257,8 @@ class RestAdmin(RestAdminBase, ModelAdmin):
 
         context.update(extra_context or {})
 
-        return self.render_change_form(request, context, add=add, change=not add, obj=obj, form_url=form_url)
+        return self.render_change_form(
+            request, context, add=add, change=not add, obj=obj, form_url=form_url)
 
     def _create_formsets(self, request, obj, change):
         "Helper function to generate formsets for add/change_view."
@@ -285,15 +295,6 @@ class RestAdmin(RestAdminBase, ModelAdmin):
 
     @csrf_protect_m
     def delete_view(self, request, object_id, extra_context=None):
-        # def get_deleted_objects(*args, **kwargs):
-        #     result = (args[0], {self.model.__name__: 1}, [], [])
-        #     return result
-        #
-        # with patch(
-        #         'django.contrib.admin.utils.get_deleted_objects',
-        #         new=get_deleted_objects):
-        #     return super(RestAdmin, self).delete_view(
-        #         request, object_id, extra_context)
         "The 'delete' admin view for this model."
         opts = self.model._meta
         app_label = opts.app_label
@@ -317,7 +318,8 @@ class RestAdmin(RestAdminBase, ModelAdmin):
 
         # Populate deleted_objects, a data structure of all related objects that
         # will also be deleted.
-        deleted_objects, model_count, perms_needed, protected = [obj], {self.model.__name__: 1}, [], []
+        deleted_objects, model_count, perms_needed, protected = (
+            [obj], {self.model.__name__: 1}, [], [])
 
         if request.POST:  # The user has already confirmed the deletion.
             if perms_needed:
