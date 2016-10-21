@@ -200,9 +200,18 @@ class RestAdmin(RestAdminBase, ModelAdmin):
 
             formsets, inline_instances = self._create_formsets(request, new_object, change=not add)
             if all_valid(formsets) and form_validated:
+                server_errors = False
                 try:
                     self.save_model(request, new_object, form, not add)
-                    self.save_related(request, form, formsets, not add)
+                except RestValidationException as err:
+                    form = err.add_errors_to_form(form)
+                    server_errors = True
+                if not server_errors:
+                    try:
+                        self.save_related(request, form, formsets, not add)
+                    except RestValidationException:
+                        server_errors = True
+                if not server_errors:
                     if add:
                         self.log_addition(request, new_object)
                         return self.response_add(request, new_object)
@@ -210,14 +219,6 @@ class RestAdmin(RestAdminBase, ModelAdmin):
                         change_message = self.construct_change_message(request, form, formsets)
                         self.log_change(request, new_object, change_message)
                         return self.response_change(request, new_object)
-                except RestValidationException as err:
-                    for key, errors in err.response.content.items():
-                        if key == 'non_field_errors':
-                            field = None
-                        else:
-                            field = key
-                        for error in errors:
-                            form.add_error(field, error)
         else:
             if add:
                 initial = self.get_changeform_initial_data(request)
