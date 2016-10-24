@@ -6,11 +6,14 @@ from django.core.exceptions import PermissionDenied
 from django.core.urlresolvers import reverse
 from django.conf import settings
 from django.contrib.admin import helpers
+from django.contrib.admin.options import TO_FIELD_VAR, IS_POPUP_VAR
 from django.contrib.admin.templatetags.admin_static import static
+from django.contrib.admin.templatetags.admin_urls import add_preserved_filters
 from django.contrib.admin.utils import unquote
 from django.db import models, transaction
 from django.forms.formsets import all_valid
 from django.http import Http404
+from django.template.response import SimpleTemplateResponse, TemplateResponse
 from django.utils.decorators import method_decorator
 from django.utils.encoding import force_text
 from django.utils.html import escape
@@ -22,6 +25,13 @@ from restorm.exceptions import RestValidationException
 from .options import InlineRestAdmin, RestAdmin
 
 csrf_protect_m = method_decorator(csrf_protect)
+
+
+def get_content_type_for_model(obj):
+    # Since this module gets imported in the application's root package,
+    # it cannot import models from other applications at the module level.
+    from django.contrib.contenttypes.models import ContentType
+    return ContentType.objects.get_for_model(obj, for_concrete_model=False)
 
 
 class NestedRestAdmin(RestAdmin):
@@ -69,6 +79,45 @@ class NestedRestAdmin(RestAdmin):
         form.save_m2m()
         for formset in formsets:
             self.save_formset(request, form, formset, change=change)
+
+
+    def render_change_form(self, request, context, add=False, change=False, form_url='', obj=None):
+        opts = self.model._meta
+        app_label = opts.app_label
+        preserved_filters = self.get_preserved_filters(request)
+        form_url = add_preserved_filters({'preserved_filters': preserved_filters, 'opts': opts}, form_url)
+        view_on_site_url = self.get_view_on_site_url(obj)
+        context.update({
+            'add': add,
+            'change': change,
+            'has_add_permission': self.has_add_permission(request),
+            'has_change_permission': self.has_change_permission(request, obj),
+            'has_delete_permission': self.has_delete_permission(request, obj),
+            'has_file_field': True,  # FIXME - this should check if form or formsets have a FileField,
+            'has_absolute_url': view_on_site_url is not None,
+            'absolute_url': view_on_site_url,
+            'form_url': form_url,
+            'opts': opts,
+            'content_type_id': None,
+            'save_as': self.save_as,
+            'save_on_top': self.save_on_top,
+            'to_field_var': TO_FIELD_VAR,
+            'is_popup_var': IS_POPUP_VAR,
+            'app_label': app_label,
+        })
+        if add and self.add_form_template is not None:
+            form_template = self.add_form_template
+        else:
+            form_template = self.change_form_template
+
+        request.current_app = self.admin_site.name
+
+        return TemplateResponse(request, form_template or [
+            "admin/%s/%s/nested_change_form.html" % (app_label, opts.model_name),
+            "admin/%s/nested_change_form.html" % app_label,
+            "admin/nested_change_form.html"
+        ], context)
+
 
     def add_nested_inline_formsets(self, request, inline, formset, depth=0):
         if depth > 5:
