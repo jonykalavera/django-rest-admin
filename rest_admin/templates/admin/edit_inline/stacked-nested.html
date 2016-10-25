@@ -1,12 +1,13 @@
 {% load i18n admin_static %}
-<div class="inline-group{% if recursive_formset %} {{ recursive_formset.formset.prefix|default:"Root" }}-nested-inline {% if prev_prefix %} {{ prev_prefix }}-{{ loopCounter }}-nested-inline{% endif %} nested-inline{% endif %}" id="{{ inline_admin_formset.formset.prefix }}-group">
+<div class="inline-group grp-group grp-stacked {% if recursive_formset %} {{ recursive_formset.formset.prefix|default:"Root" }}-nested-inline {% if prev_prefix %} {{ prev_prefix }}-{{ loopCounter }}-nested-inline{% endif %} nested-inline{% endif %}" id="{{ inline_admin_formset.formset.prefix }}-group">
 {% with recursive_formset=inline_admin_formset stacked_template='admin/edit_inline/stacked-nested.html' tabular_template='admin/edit_inline/tabular-nested.html'%}
-  <h2>{{ recursive_formset.opts.verbose_name_plural|title }}</h2>
+  <h2 class="grp-collapse-handler">{{ recursive_formset.opts.verbose_name_plural|title }}</h2>
 {{ recursive_formset.formset.management_form }}
 {{ recursive_formset.formset.non_form_errors }}
+ <div class="grp-items">
 
-{% for inline_admin_form in recursive_formset %}<div class="inline-related{% if forloop.last %} empty-form last-related{% endif %}" id="{{ recursive_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
-    <h3><b>{{ recursive_formset.opts.verbose_name|title }}:</b>&nbsp;<span class="inline_label">{% if inline_admin_form.original %}{{ inline_admin_form.original }}{% else %}#{{ forloop.counter }}{% endif %}</span>
+{% for inline_admin_form in recursive_formset %}<div class="inline-related grp-module{% if forloop.last %} empty-form last-related{% endif %}" id="{{ recursive_formset.formset.prefix }}-{% if not forloop.last %}{{ forloop.counter0 }}{% else %}empty{% endif %}">
+    <h3 class="grp-collapse-handler"><b>{{ recursive_formset.opts.verbose_name|title }}:</b>&nbsp;<span class="inline_label">{% if inline_admin_form.original %}{{ inline_admin_form.original }}{% else %}#{{ forloop.counter }}{% endif %}</span>
     {% if inline_admin_form.show_url %}<a href="../../../r/{{ inline_admin_form.original_content_type_id }}/{{ inline_admin_form.original.id }}/">{% trans "View on site" %}</a>{% endif %}
         {% if recursive_formset.formset.can_delete and inline_admin_form.original %}<span class="delete">{{ inline_admin_form.deletion_field.field }} {{ inline_admin_form.deletion_field.label_tag }}</span>{% endif %}
   </h3>
@@ -27,6 +28,7 @@
     {% endfor %}
   {% endif %}
 </div>{% endfor %}
+</div>
 </div>
 
 <script type="text/javascript">
