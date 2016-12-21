@@ -360,6 +360,35 @@ class RestAdmin(RestAdminBase, ModelAdmin):
 
         return self.render_delete_form(request, context)
 
+    def get_search_fields(self, request):
+        """
+        Returns a sequence containing the fields to be searched whenever
+        somebody submits a search query.
+        """
+        return self.search_fields
+
+    def get_search_results(self, request, queryset, search_term):
+        """
+        Returns a tuple containing a queryset to implement the search,
+        and a boolean indicating if the results may contain duplicates.
+        """
+        # Apply keyword searches.
+        def construct_search(field_name):
+            if field_name.startswith('^'):
+                return "%s__istartswith" % field_name[1:]
+            elif field_name.startswith('='):
+                return "%s__iexact" % field_name[1:]
+            elif field_name.startswith('@'):
+                return "%s__search" % field_name[1:]
+            else:
+                return "%s__icontains" % field_name
+
+        search_fields = self.get_search_fields(request)
+        use_distinct = False
+        rest_filters = {construct_search(field): search_term for field in search_fields}
+        queryset = queryset.filter(**rest_filters)
+        return queryset, use_distinct
+
 
 class InlineRestAdmin(RestAdminBase, InlineModelAdmin):
     form = RestForm
