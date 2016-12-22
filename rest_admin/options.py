@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+import base64
 from functools import partial
+import json
 
 from django import forms
 from django.core.exceptions import PermissionDenied
@@ -385,8 +387,8 @@ class RestAdmin(RestAdminBase, ModelAdmin):
 
         search_fields = self.get_search_fields(request)
         use_distinct = False
-        rest_filters = {construct_search(field): search_term for field in search_fields}
-        queryset = queryset.filter(**rest_filters)
+        encoded = base64.b64encode(json.dumps({search_term: search_fields}))
+        queryset = queryset.filter(query=encoded)
         return queryset, use_distinct
 
 
